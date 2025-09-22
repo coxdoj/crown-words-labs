@@ -1,0 +1,128 @@
+# GitHub Pages Deployment Workflow
+# 
+# This workflow automatically builds and deploys your site to GitHub Pages.
+# It works for both static sites and sites that require a build step.
+# 
+# Features:
+# - Auto-detects if your project needs building (looks for package.json)
+# - Supports multiple frameworks (React, Vue, Next.js, Jekyll, etc.)
+# - Intelligently finds build output directory (dist, build, out, _site)
+# - Caches Node.js dependencies for faster builds
+# - Handles errors gracefully
+#
+name: Deploy to GitHub Pages
+
+# Trigger the workflow on push to main branch
+on:
+  push:
+    branches: [ main ]
+  # Allow manual workflow dispatch
+  workflow_dispatch:
+
+# Set permissions needed for GitHub Pages deployment
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # Build job - handles both static sites and sites requiring build
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect build requirements
+        id: detect
+        run: |
+          if [ -f "package.json" ]; then
+            echo "needs_build=true" >> $GITHUB_OUTPUT
+            echo "📦 Node.js project detected - build required"
+          else
+            echo "needs_build=false" >> $GITHUB_OUTPUT
+            echo "📄 Static site detected - no build required"
+          fi
+
+      - name: Setup Node.js (if needed)
+        if: steps.detect.outputs.needs_build == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        if: steps.detect.outputs.needs_build == 'true'
+        run: |
+          echo "🔧 Installing dependencies..."
+          npm ci || {
+            echo "❌ Failed to install dependencies"
+            exit 1
+          }
+
+      - name: Build project
+        if: steps.detect.outputs.needs_build == 'true'
+        run: |
+          echo "🏗️ Building project..."
+          npm run build || {
+            echo "❌ Build failed"
+            exit 1
+          }
+
+      - name: Detect build output directory
+        if: steps.detect.outputs.needs_build == 'true'
+        id: build-dir
+        run: |
+          # Check for common build directories in order of preference
+          if [ -d "dist" ]; then
+            echo "build_dir=./dist" >> $GITHUB_OUTPUT
+            echo "📁 Using dist/ directory"
+          elif [ -d "build" ]; then
+            echo "build_dir=./build" >> $GITHUB_OUTPUT
+            echo "📁 Using build/ directory"
+          elif [ -d "out" ]; then
+            echo "build_dir=./out" >> $GITHUB_OUTPUT
+            echo "📁 Using out/ directory"
+          elif [ -d "_site" ]; then
+            echo "build_dir=./_site" >> $GITHUB_OUTPUT
+            echo "📁 Using _site/ directory"
+          else
+            echo "build_dir=." >> $GITHUB_OUTPUT
+            echo "⚠️ No common build directory found, using root directory"
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact (built site)
+        if: steps.detect.outputs.needs_build == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ steps.build-dir.outputs.build_dir }}
+
+      - name: Upload artifact (static site)
+        if: steps.detect.outputs.needs_build == 'false'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+  # Deploy job - deploys the built artifact to GitHub Pages
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        with:
+          timeout: 600000
+          error_count: 10
+          reporting_interval: 30000

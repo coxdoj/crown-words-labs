@@ -1,0 +1,21 @@
+# Archive files
+*.zip
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Build outputs (when needed)
+dist/
+build/
+out/
+_site/
